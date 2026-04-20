@@ -155,7 +155,15 @@ def _run_test(
         # The warning is accurate from the subprocess point of view, it can't see the other test.
         # But the warning is misleading because the main process sucessefully ordered the tests.
         # Passing "-p", "no:order". Causes the misleading warnings to stop.
-        [item_nodeid, "--no-header", "-p", "no:terminalreporter", "-p", "no:order", *config_args],
+        [
+            item_nodeid,
+            "--no-header",
+            "-p",
+            "no:terminalreporter",
+            "-p",
+            "no:order",
+            *config_args,
+        ],
         plugins=[plugin, worker_plugin],
     )
 

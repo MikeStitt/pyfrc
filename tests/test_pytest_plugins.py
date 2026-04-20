@@ -461,8 +461,7 @@ def test_order_marker_enforces_sequencing(
         else '@pytest.mark.order(after="test_a")\n'
     )
 
-    pytester.makepyfile(
-        test_order_sequence=f"""\
+    pytester.makepyfile(test_order_sequence=f"""\
 import pathlib
 import pytest
 
@@ -477,8 +476,7 @@ def test_b{params(b_type)}:
 
 {a_mark}def test_a{params(a_type)}:
     pathlib.Path("sentinel.txt").write_text("done")
-"""
-    )
+""")
 
     result = pytester.runpytest_subprocess("-vv")
     result.assert_outcomes(passed=3)
@@ -505,8 +503,7 @@ def test_unordered_tests_still_run_in_parallel(pytester, a_fixture, b_fixture):
     def params(f):
         return f"({f})" if f else "()"
 
-    pytester.makepyfile(
-        test_parallel_execution=f"""\
+    pytester.makepyfile(test_parallel_execution=f"""\
 import pathlib
 import time
 
@@ -521,8 +518,7 @@ def test_b{params(b_fixture)}:
     pathlib.Path("b_start.txt").write_text(str(time.monotonic()))
     time.sleep(1.5)
     pathlib.Path("b_end.txt").write_text(str(time.monotonic()))
-"""
-    )
+""")
 
     result = pytester.runpytest_subprocess("-vv")
     result.assert_outcomes(passed=2)
@@ -530,4 +526,6 @@ def test_b{params(b_fixture)}:
     root = pathlib.Path(pytester.path)
     a_end = float((root / "a_end.txt").read_text())
     b_start = float((root / "b_start.txt").read_text())
-    assert b_start < a_end, f"Expected parallel: b_start={b_start:.3f} a_end={a_end:.3f}"
+    assert (
+        b_start < a_end
+    ), f"Expected parallel: b_start={b_start:.3f} a_end={a_end:.3f}"
