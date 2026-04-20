@@ -423,60 +423,66 @@ def test_state_transitions(robot, control):
 
 @pytest.mark.parametrize("marker_style", ["numeric", "after"])
 @pytest.mark.parametrize(
-    "a_type, b_type, c_type",
+    "first_type, middle_type, last_type",
     [
-        ("R", "R", "N"),
-        ("R", "N", "R"),
-        ("N", "R", "R"),
-        ("R", "N", "N"),
-        ("N", "R", "N"),
-        ("N", "N", "R"),
+        ("ROBOT", "ROBOT", "PLAIN"),
+        ("ROBOT", "PLAIN", "ROBOT"),
+        ("PLAIN", "ROBOT", "ROBOT"),
+        ("ROBOT", "PLAIN", "PLAIN"),
+        ("PLAIN", "ROBOT", "PLAIN"),
+        ("PLAIN", "PLAIN", "ROBOT"),
     ],
 )
 def test_order_marker_enforces_sequencing(
-    pytester, a_type, b_type, c_type, marker_style
+    pytester, first_type, middle_type, last_type, marker_style
 ):
     """
-    Order markers are respected across all mixed robot/non-robot permutations.
+    Order markers enforce a first→middle→last chain across all mixed
+    robot/non-robot permutations.
 
-    test_a writes a sentinel; test_c reads it and must run after test_a; test_b
-    is neutral.  The file lists them in reverse (c, b, a) so collection order
-    would cause test_c to fail — passing proves the constraint was enforced.
+    test_first writes sentinel_1; test_middle reads sentinel_1 and writes
+    sentinel_2; test_last reads sentinel_2.  The file lists them in reverse
+    (last, middle, first) so collection order would fail — passing proves the
+    full chain was enforced.
 
-    R = robot fixture (isolated subprocess)  N = plain test (in-process)
+    ROBOT = robot fixture (isolated subprocess)  PLAIN = plain test (in-process)
 
-    numeric: test_a=order(1), test_c=order(2)
-    after:   test_c=order(after="test_a")
+    numeric: first=order(1), middle=order(2), last=order(3)
+    after:   middle=order(after="test_first"), last=order(after="test_middle")
     """
     _make_robot_module(pytester)
     _configure_isolated_plugin(pytester, parallelism=4)
 
     def params(t):
-        return "(robot)" if t == "R" else "()"
+        return "(robot)" if t == "ROBOT" else "()"
 
-    a_mark = "@pytest.mark.order(1)\n" if marker_style == "numeric" else ""
-    c_mark = (
-        "@pytest.mark.order(2)\n"
-        if marker_style == "numeric"
-        else '@pytest.mark.order(after="test_a")\n'
-    )
+    if marker_style == "numeric":
+        first_mark  = "@pytest.mark.order(1)\n"
+        middle_mark = "@pytest.mark.order(2)\n"
+        last_mark   = "@pytest.mark.order(3)\n"
+    else:
+        first_mark  = ""
+        middle_mark = '@pytest.mark.order(after="test_first")\n'
+        last_mark   = '@pytest.mark.order(after="test_middle")\n'
 
     pytester.makepyfile(test_order_sequence=f"""\
 import pathlib
 import pytest
 
 
-{c_mark}def test_c{params(c_type)}:
-    assert pathlib.Path("sentinel.txt").exists(), "test_a must run before test_c"
+{last_mark}def test_last{params(last_type)}:
+    assert pathlib.Path("sentinel_2.txt").exists(), "test_middle must run before test_last"
 
 
-def test_b{params(b_type)}:
-    pass
+{middle_mark}def test_middle{params(middle_type)}:
+    assert pathlib.Path("sentinel_1.txt").exists(), "test_first must run before test_middle"
+    pathlib.Path("sentinel_2.txt").write_text("done")
 
 
-{a_mark}def test_a{params(a_type)}:
-    pathlib.Path("sentinel.txt").write_text("done")
-""")
+{first_mark}def test_first{params(first_type)}:
+    pathlib.Path("sentinel_1.txt").write_text("done")
+"""
+    )
 
     result = pytester.runpytest_subprocess("-vv")
     result.assert_outcomes(passed=3)
