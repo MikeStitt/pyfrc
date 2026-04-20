@@ -147,7 +147,7 @@ def _run_test(
     worker_plugin = WorkerPlugin(pipe)
 
     ec = pytest.main(
-        [item_nodeid, "--no-header", "-p", "no:terminalreporter", *config_args],
+        [item_nodeid, "--no-header", "-p", "no:terminalreporter", "-p", "no:order", *config_args],
         plugins=[plugin, worker_plugin],
     )
 
