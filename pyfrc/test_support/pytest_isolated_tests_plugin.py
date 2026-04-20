@@ -235,42 +235,48 @@ class IsolatedTestsPlugin:
             return True
 
         running: list[IsolatedTestJob] = []
-        deferred: list[pytest.Function] = []
         try:
-            # Start any tests that use the robot fixture first. Tests that don't
-            # use the robot fixture will be ran later
-            for item in session.items:
+            # Start tests in the order that they are given to us,
+            # running robot fixture tests in sub process, preserving
+            # order marker boundaries.
+            for idx, item in enumerate(session.items):
                 assert isinstance(item, pytest.Function)
-                if "robot" not in item.fixturenames:
-                    deferred.append(item)
-                    continue
 
                 # If this test has an order marker, drain all running subprocesses first
                 # so that ordered tests execute sequentially and never in parallel.
                 # This works because the pytest-order plugin presorts the list of test
                 # before they reach this point in the code.
-                #
-                # The above code which defers code without a robot fixture will break
-                # @pytest.maker.order for order configurations which involve both robot
-                # fixture tests and non robot fixture tests.
 
                 if item.get_closest_marker("order") is not None:
                     while running:
                         self._wait_for_jobs(running, session)
 
-                while len(running) >= self._parallelism:
-                    self._wait_for_jobs(running, session)
+                if "robot" in item.fixturenames:
+                    # This test uses a "robot" fixture, run it in an isolated subprocess.
+                    while len(running) >= self._parallelism:
+                        self._wait_for_jobs(running, session)
 
-                running.append(self._start_isolated_test(item))
-                self._maybe_raise(session)
+                    running.append(self._start_isolated_test(item))
+                    self._maybe_raise(session)
+                else:
+                    # This test runs in this process.
 
-            # Run the in-process tests now while the robot tests are finishing
-            for idx, item in enumerate(deferred):
-                nextitem = deferred[idx + 1] if idx + 1 < len(deferred) else None
-                session.config.hook.pytest_runtest_protocol(
-                    item=item, nextitem=nextitem
-                )
-                self._maybe_raise(session)
+                    # Determine if the next item to run is also "in process" to pass it as a
+                    # hint to pytest_runtest_protocol so that it can optimize teardown in preparation
+                    # for the the nextitem to be tested after this item.
+                    nextitem = (
+                        session.items[idx + 1] if idx + 1 < len(session.items) else None
+                    )
+                    nextitem = (
+                        None
+                        if nextitem is None or "robot" in nextitem.fixturenames
+                        else nextitem
+                    )
+
+                    session.config.hook.pytest_runtest_protocol(
+                        item=item, nextitem=nextitem
+                    )
+                    self._maybe_raise(session)
 
             while running:
                 self._wait_for_jobs(running, session)
