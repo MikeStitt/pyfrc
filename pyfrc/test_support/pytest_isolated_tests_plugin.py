@@ -147,6 +147,14 @@ def _run_test(
     worker_plugin = WorkerPlugin(pipe)
 
     ec = pytest.main(
+        # "-p", "no:order" tells pytest in the isolated subprocess to not run pytest-order or look at the
+        # @pytest.marder.order decorators. This is fine because the isolated subprocess runs just
+        # one test at a time, so order does not matter at this level. The purpose of not running
+        # pytest-order is so that it doesn't give misleading warnings like:
+        # WARNING: cannot execute 'test_step2_reads_sentinel' relative to others: 'test_step1_writes_sentinel' - ignoring the marker.
+        # The warning is accurate from the subprocess point of view, it can't see the other test.
+        # But the warning is misleading because the main process sucessefully ordered the tests.
+        # Passing "-p", "no:order". Causes the misleading warnings to stop.
         [item_nodeid, "--no-header", "-p", "no:terminalreporter", "-p", "no:order", *config_args],
         plugins=[plugin, worker_plugin],
     )
